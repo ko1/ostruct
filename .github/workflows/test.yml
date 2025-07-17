@@ -3,20 +3,32 @@ name: test
 on: [push, pull_request]
 
 jobs:
+  ruby-versions:
+    uses: ruby/actions/.github/workflows/ruby_versions.yml@master
+    with:
+      engine: cruby-jruby
+      min_version: 2.5
+
   build:
+    needs: ruby-versions
     name: build (${{ matrix.ruby }} / ${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
-        ruby: [ '3.0', 2.7, 2.6, 2.5, head, truffleruby-head ]
+        ruby: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
         os: [ ubuntu-latest, macos-latest ]
+        # CRuby < 2.6 does not support macos-arm64, so test those on amd64 instead
+        exclude:
+        - { os: macos-latest, ruby: '2.5' }
+        include:
+        - { os: macos-13, ruby: '2.5' }
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: ${{ matrix.ruby }}
-    - name: Install dependencies
-      run: bundle install
+        bundler-cache: true
     - name: Run test
-      run: rake test
+      run: bundle exec rake test

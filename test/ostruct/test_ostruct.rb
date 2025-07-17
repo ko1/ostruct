@@ -358,26 +358,34 @@ class TC_OpenStruct < Test::Unit::TestCase
 
   def test_ractor
     assert_ractor(<<~RUBY, require: 'ostruct')
+      class Ractor
+        alias value take
+      end unless Ractor.method_defined? :value # compat with Ruby 3.4 and olders
+
       obj1 = OpenStruct.new(a: 42, b: 42)
       obj1.c = 42
       obj1.freeze
 
       obj2 = Ractor.new obj1 do |obj|
         obj
-      end.take
+      end.value
       assert obj1.object_id == obj2.object_id
     RUBY
   end if defined?(Ractor)
 
   def test_access_methods_from_different_ractor
     assert_ractor(<<~RUBY, require: 'ostruct')
+      class Ractor
+        alias value take
+      end unless Ractor.method_defined? :value # compat with Ruby 3.4 and olders
+
       os = OpenStruct.new
       os.value = 100
       r = Ractor.new(os) do |x|
         v = x.value
-        Ractor.yield v
+        v
       end
-      assert 100 == r.take
+      assert 100 == r.value
     RUBY
   end if defined?(Ractor)
 
@@ -405,5 +413,30 @@ class TC_OpenStruct < Test::Unit::TestCase
     o = OpenStruct.new(name: "John Smith", age: 70, pension: 300.42)
     o2 = Marshal.load(Marshal.dump(o))
     assert_equal o, o2
+  end
+
+  def test_class
+    os = OpenStruct.new(class: 'my-class', method: 'post')
+    assert_equal('my-class', os.class)
+    assert_equal(OpenStruct, os.class!)
+  end
+
+  has_performance_warnings = begin
+    Warning[:performance]
+    true
+  rescue NoMethodError, ArgumentError
+    false
+  end
+
+  if has_performance_warnings
+    def test_performance_warning
+      assert_in_out_err(
+        %w(-Ilib -rostruct -w -W:performance -e) + ['OpenStruct.new(a: 1)'],
+        "",
+        [],
+        ["-e:1: warning: OpenStruct use is discouraged for performance reasons"],
+        success: true,
+      )
+    end
   end
 end
